@@ -1,5 +1,6 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
+author: Joaquin Chua
 output: 
   html_document:
     keep_md: true
@@ -7,19 +8,117 @@ output:
 
 
 ## Loading and preprocessing the data
+Load libraries, unzip and read file
+```{r initialise}
+library(data.table)
+library(ggplot2)
 
+unzip("activity.zip")
+data <- fread("activity.csv")
+```
 
 
 ## What is mean total number of steps taken per day?
+1. Calculate the total number of steps taken per day
+```{r}
+totalsteps <- data[ , sum(steps), by=.(date)]
+names(totalsteps)[2] <- "steps"
+totalsteps
+```
 
+2. If you do not understand the difference between a histogram and a barplot, research the difference between them. Make a histogram of the total number of steps taken each day
 
+```{r}
+ggplot(totalsteps, aes(x = steps)) +
+    geom_histogram(binwidth = 500) +
+    labs(title = "Total Steps Per Day", x = "Steps", y = "Frequency")
+```
+
+3. Calculate and report the mean and median of the total number of steps taken per day
+```{r}
+mean(totalsteps$steps, na.rm = T)
+median(totalsteps$steps, na.rm = T)
+```
 
 ## What is the average daily activity pattern?
+1. Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+```{r}
+intervalsteps <- data[ , mean(steps, na.rm = T), by=.(interval)]
+names(intervalsteps)[2] <- "meansteps"
 
+ggplot(intervalsteps, aes(x = interval, y = meansteps)) +
+  geom_line() +
+  labs(title = "Average Daily Steps", x = "Interval", y = "Steps")
+```
 
+2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r}
+intervalsteps[meansteps==max(meansteps), .(interval)]
+```
 
 ## Imputing missing values
+1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+```{r}
+data[is.na(steps), .N]
+```
 
+2. Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+```{r}
+# Impute using mean of each interval
+data2 <- copy(data)
+forimput <- data[ , round(mean(steps, na.rm = T)), by=.(interval)]
+names(forimput)[2] <- "meansteps"
+
+for (i in 1:data2[,.N]) {
+  if (is.na(data2[i,steps])) {
+    data2[i,"steps"] <- forimput[interval == data2[i,interval], meansteps]
+  }
+}
+```
+
+3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+```{r}
+fwrite(data2,"activity_filled.csv")
+```
+
+4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
+```{r}
+totalsteps2 <- data2[ , sum(steps), by=.(date)]
+names(totalsteps2)[2] <- "steps"
+
+ggplot(totalsteps2, aes(x = steps)) +
+    geom_histogram(binwidth = 500) +
+    labs(title = "Total Steps Per Day", x = "Steps", y = "Frequency")
+```
+
+```{r}
+mean(totalsteps2$steps, na.rm = T)
+median(totalsteps2$steps, na.rm = T)
+```
+
+There are differences for the mean and median between the raw dataset and imputed dataset. The imputed dataset results in a lower mean and median steps per day. 
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+1. Create a new factor variable in the dataset with two levels – “weekday” and “weekend” indicating whether a given date is a weekday or weekend day.
+
+```{r}
+data2[, date := as.Date(date)]
+data2[, day := weekdays(date)]
+
+data2[, daytype := as.factor(ifelse(day %in% c("Saturday","Sunday"), "weekend", "weekday"))]
+```
+
+
+2. Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). See the README file in the GitHub repository to see an example of what this plot should look like using simulated data.
+```{r}
+intervalsteps2 <- data2[ , mean(steps, na.rm = T), by=.(interval,daytype)]
+names(intervalsteps2)[3] <- "meansteps"
+
+ggplot(intervalsteps2, aes(x = interval, y = meansteps, colour = daytype)) +
+  geom_line() +
+  facet_wrap(.~daytype, nrow = 2) +
+  labs(title = "Average Daily Steps", x = "Interval", y = "Steps")
+```
+
+
